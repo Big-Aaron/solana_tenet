@@ -1,0 +1,5 @@
+node_modules/
+.surfpool/
+*.log
+test/fixtures/clock_probe/target/
+test/fixtures/clock_probe-keypair.json
