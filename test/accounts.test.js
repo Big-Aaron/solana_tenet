@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import bs58 from "bs58";
-import { PublicKey } from "@solana/web3.js";
 
 import { balancesFromSnapshots } from "../src/core/accounts.js";
 import { decodeTokenAccount } from "../src/core/token.js";
@@ -44,7 +43,7 @@ describe("balancesFromSnapshots", () => {
     const mintData = Buffer.alloc(82);
     mintData[44] = 6;
     const connection = fakeConnection({
-      [MINT]: { lamports: 1, owner: new PublicKey(TOKEN_PROGRAM), data: mintData },
+      [MINT]: { lamports: 1, owner: TOKEN_PROGRAM, data: mintData },
     });
     const pre = [
       { lamports: 100, owner: SYSTEM_PROGRAM, data: Buffer.alloc(0) },

@@ -1,6 +1,6 @@
 import { text } from "node:stream/consumers";
 
-import { createConnection, fetchTransaction } from "../core/rpc.js";
+import { createRpc, fetchTransaction } from "../core/rpc.js";
 import { classifyInput } from "../core/transaction.js";
 import { status } from "../utils/diagnostics.js";
 
@@ -25,6 +25,6 @@ export async function loadTransaction(input, rpcUrl) {
     return { wire: parsed.wire, fetched: null };
   }
   status(`Fetching transaction ${parsed.signature} ...`);
-  const fetched = await fetchTransaction(createConnection(rpcUrl), parsed.signature);
+  const fetched = await fetchTransaction(createRpc(rpcUrl), parsed.signature);
   return { wire: fetched.wire, fetched };
 }

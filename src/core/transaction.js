@@ -1,5 +1,12 @@
 import bs58 from "bs58";
-import { VersionedTransaction } from "@solana/web3.js";
+import {
+  getCompiledTransactionMessageDecoder,
+  getTransactionDecoder,
+  transactionConfigMaskHasComputeUnitLimit,
+  transactionConfigMaskHasHeapSize,
+  transactionConfigMaskHasLoadedAccountsDataSizeLimit,
+  transactionConfigMaskHasPriorityFee,
+} from "@solana/kit";
 
 import { decodeInstruction } from "../parsers/instructions.js";
 import { COMPUTE_BUDGET_PROGRAM, SYSTEM_PROGRAM } from "../parsers/programs.js";
@@ -12,9 +19,105 @@ const NONCE_BLOCKHASH_OFFSET = 40;
 const DEFAULT_CU_PER_INSTRUCTION = 200_000;
 const MAX_COMPUTE_UNIT_LIMIT = 1_400_000;
 
+const transactionDecoder = getTransactionDecoder();
+const compiledMessageDecoder = getCompiledTransactionMessageDecoder();
+
+/** Uniform view of a Kit compiled message, for legacy, v0, and v1 wire bytes. */
+function adaptTransaction(transaction, message) {
+  const staticAccountKeys = message.staticAccounts;
+  const header = message.header;
+  return {
+    version: message.version,
+    signatures: Object.values(transaction.signatures).map((signature) => signature ?? new Uint8Array(64)),
+    message: {
+      version: message.version,
+      recentBlockhash: message.lifetimeToken,
+      staticAccountKeys,
+      compiledInstructions: compiledInstructions(message),
+      addressTableLookups: addressTableLookups(message),
+      transactionConfig: message.version === 1 ? transactionConfig(message) : null,
+      isAccountSigner(index) {
+        return index < header.numSignerAccounts;
+      },
+      isAccountWritable(index) {
+        return accountIsWritable(header, staticAccountKeys.length, index);
+      },
+    },
+  };
+}
+
+function compiledInstructions(message) {
+  if (message.version === 1) {
+    return message.instructionHeaders.map((header, index) => {
+      const payload = message.instructionPayloads[index];
+      return {
+        programIdIndex: header.programAccountIndex,
+        accountKeyIndexes: payload?.instructionAccountIndices ?? [],
+        data: new Uint8Array(payload?.instructionData ?? []),
+      };
+    });
+  }
+  return message.instructions.map((ix) => ({
+    programIdIndex: ix.programAddressIndex,
+    accountKeyIndexes: ix.accountIndices ?? [],
+    data: new Uint8Array(ix.data ?? []),
+  }));
+}
+
+function addressTableLookups(message) {
+  if (message.version !== 0) {
+    return [];
+  }
+  return (message.addressTableLookups ?? []).map((lookup) => ({
+    accountKey: lookup.lookupTableAddress,
+    writableIndexes: lookup.writableIndexes,
+    readonlyIndexes: lookup.readonlyIndexes,
+  }));
+}
+
+/** Unset v1 fields are `null`. The priority fee is exposed as `priorityFee`. */
+function transactionConfig(message) {
+  const config = {
+    computeUnitLimit: null,
+    heapSize: null,
+    loadedAccountsDataSizeLimit: null,
+    priorityFee: null,
+  };
+  const values = message.configValues ?? [];
+  let index = 0;
+  if (transactionConfigMaskHasPriorityFee(message.configMask)) {
+    config.priorityFee = Number(values[index++].value);
+  }
+  if (transactionConfigMaskHasComputeUnitLimit(message.configMask)) {
+    config.computeUnitLimit = values[index++].value;
+  }
+  if (transactionConfigMaskHasLoadedAccountsDataSizeLimit(message.configMask)) {
+    config.loadedAccountsDataSizeLimit = values[index++].value;
+  }
+  if (transactionConfigMaskHasHeapSize(message.configMask)) {
+    config.heapSize = values[index++].value;
+  }
+  return config;
+}
+
+function accountIsWritable(header, staticCount, index) {
+  const numSigned = header.numSignerAccounts;
+  if (index >= staticCount || index < 0) {
+    return false;
+  }
+  if (index >= numSigned) {
+    const unsignedIndex = index - numSigned;
+    const numWritableUnsigned = staticCount - numSigned - header.numReadonlyNonSignerAccounts;
+    return unsignedIndex < numWritableUnsigned;
+  }
+  return index < numSigned - header.numReadonlySignerAccounts;
+}
+
 function tryDeserialize(bytes) {
   try {
-    return VersionedTransaction.deserialize(bytes);
+    const transaction = transactionDecoder.decode(bytes);
+    const message = compiledMessageDecoder.decode(transaction.messageBytes);
+    return adaptTransaction(transaction, message);
   } catch {
     return null;
   }
@@ -75,12 +178,12 @@ export function durableNonceAccount(tx) {
     return null;
   }
   const keys = message.staticAccountKeys;
-  const program = keys[first.programIdIndex]?.toBase58();
+  const program = keys[first.programIdIndex];
   const data = Buffer.from(first.data);
   if (program !== SYSTEM_PROGRAM || data.length < 4 || data.readUInt32LE(0) !== ADVANCE_NONCE_ACCOUNT) {
     return null;
   }
-  return keys[first.accountKeyIndexes[0]]?.toBase58() ?? null;
+  return keys[first.accountKeyIndexes[0]] ?? null;
 }
 
 /** Copy of nonce account data whose stored durable nonce is replaced by `blockhash`. */
@@ -94,20 +197,21 @@ export function withNonceBlockhash(nonceData, blockhash) {
 }
 
 /** Resolve address lookup table entries in runtime order: all writable, then all readonly. */
-export async function resolveLoadedAddresses(connection, tx) {
+export async function resolveLoadedAddresses(rpc, tx) {
   const writable = [];
   const readonly = [];
   for (const lookup of tx.message.addressTableLookups) {
-    const { value } = await connection.getAddressLookupTable(lookup.accountKey);
-    if (!value) {
-      throw new Error(`Address lookup table not found: ${lookup.accountKey.toBase58()}`);
+    const { value } = await rpc.getAccountInfo(lookup.accountKey, { encoding: "jsonParsed" }).send();
+    const addresses = value?.data?.parsed?.info?.addresses;
+    if (!value || !addresses) {
+      throw new Error(`Address lookup table not found: ${lookup.accountKey}`);
     }
     const pick = (index) => {
-      const address = value.state.addresses[index];
+      const address = addresses[index];
       if (!address) {
-        throw new Error(`Index ${index} out of range in lookup table ${lookup.accountKey.toBase58()}`);
+        throw new Error(`Index ${index} out of range in lookup table ${lookup.accountKey}`);
       }
-      return address.toBase58();
+      return address;
     };
     writable.push(...lookup.writableIndexes.map(pick));
     readonly.push(...lookup.readonlyIndexes.map(pick));
@@ -143,7 +247,7 @@ export function describeLookups(tx, loadedAddresses) {
     }));
     writableCursor += lookup.writableIndexes.length;
     readonlyCursor += lookup.readonlyIndexes.length;
-    return { accountKey: lookup.accountKey.toBase58(), writable, readonly };
+    return { accountKey: lookup.accountKey, writable, readonly };
   });
 
   const accountTags = tx.message.staticAccountKeys.map(() => null);
@@ -178,7 +282,7 @@ function tagsFor(tables, field, count) {
  */
 export function describeTransaction(tx, wire, loadedAddresses) {
   const { message } = tx;
-  const staticKeys = message.staticAccountKeys.map((key) => key.toBase58());
+  const staticKeys = message.staticAccountKeys;
   const accounts = [
     ...staticKeys.map((pubkey, index) => ({
       pubkey,
@@ -226,7 +330,7 @@ export function describeTransaction(tx, wire, loadedAddresses) {
     size: wire.length,
     recentBlockhash: message.recentBlockhash,
     config: message.version === 1 ? message.transactionConfig : null,
-    lookupTables: message.addressTableLookups.map((lookup) => lookup.accountKey.toBase58()),
+    lookupTables: message.addressTableLookups.map((lookup) => lookup.accountKey),
     lookupsResolved: loadedAddresses != null || message.addressTableLookups.length === 0,
     accounts,
     instructions,

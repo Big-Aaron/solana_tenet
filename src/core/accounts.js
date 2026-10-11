@@ -1,15 +1,13 @@
-import { PublicKey } from "@solana/web3.js";
-
 import { decodeTokenAccount, mintDecimals } from "./token.js";
 
 /** Account snapshot: `{ lamports, owner, data: Buffer }`, or `null` when the account doesn't exist. */
-export async function fetchAccounts(connection, pubkeys) {
+export async function fetchAccounts(rpc, pubkeys) {
   if (pubkeys.length === 0) {
     return [];
   }
-  const infos = await connection.getMultipleAccountsInfo(pubkeys.map((key) => new PublicKey(key)));
-  return infos.map(
-    (info) => info && { lamports: info.lamports, owner: info.owner.toBase58(), data: Buffer.from(info.data) },
+  const { value } = await rpc.getMultipleAccounts(pubkeys, { encoding: "base64" }).send();
+  return value.map(
+    (info) => info && { lamports: info.lamports, owner: info.owner, data: Buffer.from(info.data[0], "base64") },
   );
 }
 

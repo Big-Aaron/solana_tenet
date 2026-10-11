@@ -1,7 +1,7 @@
 {
   "name": "solana-tenet",
   "version": "0.1.0",
-  "description": "Solana transaction decode, simulate, and replay CLI powered by Surfpool and @solana/web3.js",
+  "description": "Solana transaction decode, simulate, and replay CLI powered by Surfpool and @solana/kit",
   "type": "module",
   "bin": {
     "tenet": "bin/tenet.js"
@@ -19,8 +19,8 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@solana/kit": "^8.4.0",
     "@solana/surfpool": "^1.6.0",
-    "@solana/web3.js": "^1.99.0",
     "bs58": "^6.0.0",
     "commander": "^15.0.0"
   }

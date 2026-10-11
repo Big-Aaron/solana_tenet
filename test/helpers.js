@@ -6,11 +6,27 @@ export function loadFixture(name) {
   return { ...fixture, wire: Buffer.from(fixture.transaction[0], "base64") };
 }
 
-/** Minimal stand-in for `Connection.getMultipleAccountsInfo`. */
+/** Minimal stand-in for Kit's `getMultipleAccounts` (`encoding: "base64"`). */
 export function fakeConnection(accounts) {
   return {
-    async getMultipleAccountsInfo(pubkeys) {
-      return pubkeys.map((key) => accounts[key.toBase58()] ?? null);
+    getMultipleAccounts(pubkeys) {
+      return {
+        async send() {
+          return {
+            value: pubkeys.map((key) => {
+              const account = accounts[key];
+              if (!account) {
+                return null;
+              }
+              return {
+                lamports: account.lamports,
+                owner: account.owner,
+                data: [Buffer.from(account.data).toString("base64"), "base64"],
+              };
+            }),
+          };
+        },
+      };
     },
   };
 }

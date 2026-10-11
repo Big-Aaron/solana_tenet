@@ -48,7 +48,10 @@ describe("decimalToUnits", () => {
 });
 
 describe("associatedTokenAddress", () => {
-  it("derives the ATA", () => {
-    assert.equal(associatedTokenAddress(WALLET, USDC, TOKEN_PROGRAM), "2h3ogbUHK6rCuCwnPGhNSMTMjhr6XxQTeY6awuDWE9uD");
+  it("derives the ATA", async () => {
+    assert.equal(
+      await associatedTokenAddress(WALLET, USDC, TOKEN_PROGRAM),
+      "2h3ogbUHK6rCuCwnPGhNSMTMjhr6XxQTeY6awuDWE9uD",
+    );
   });
 });

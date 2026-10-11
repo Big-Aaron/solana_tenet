@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import { address, getAddressEncoder, getBase58Decoder, getProgramDerivedAddress } from "@solana/kit";
 
 import { ASSOCIATED_TOKEN_PROGRAM } from "../parsers/programs.js";
 import { fetchAccounts } from "./accounts.js";
@@ -8,10 +8,12 @@ import { TOKEN_ACCOUNT_AMOUNT_OFFSET, decodeTokenAccount, mintDecimals } from ".
 const SOL_DECIMALS = 9;
 const SOL_AMOUNT = /^(\d+(?:\.\d+)?)(sol|lamports)?$/i;
 const TOKEN_AMOUNT = /^\d+(?:\.\d+)?$/;
+const addressEncoder = getAddressEncoder();
+const base58Decoder = getBase58Decoder();
 
 function parsePubkey(raw, flag) {
   try {
-    return new PublicKey(raw).toBase58();
+    return base58Decoder.decode(addressEncoder.encode(address(raw)));
   } catch {
     throw new Error(`Invalid pubkey "${raw}" in ${flag}`);
   }
@@ -73,12 +75,16 @@ export function parseTokenFunding(spec) {
   throw new Error(`Invalid --fund-token value "${spec}"`);
 }
 
-export function associatedTokenAddress(owner, mint, tokenProgram) {
-  const [address] = PublicKey.findProgramAddressSync(
-    [new PublicKey(owner).toBuffer(), new PublicKey(tokenProgram).toBuffer(), new PublicKey(mint).toBuffer()],
-    new PublicKey(ASSOCIATED_TOKEN_PROGRAM),
-  );
-  return address.toBase58();
+export async function associatedTokenAddress(owner, mint, tokenProgram) {
+  const [ata] = await getProgramDerivedAddress({
+    programAddress: address(ASSOCIATED_TOKEN_PROGRAM),
+    seeds: [
+      addressEncoder.encode(address(owner)),
+      addressEncoder.encode(address(tokenProgram)),
+      addressEncoder.encode(address(mint)),
+    ],
+  });
+  return ata;
 }
 
 function toSafeNumber(value, what) {
@@ -118,7 +124,13 @@ async function fundOwnerMint(connection, { owner, mint, amount }) {
   const { tokenProgram, decimals } = await fetchMint(connection, mint);
   const raw = amount.includes(".") ? decimalToUnits(amount, decimals) : BigInt(amount);
   await setTokenAccount(connection, owner, mint, { amount: toSafeNumber(raw, "Token amount") }, tokenProgram);
-  return { kind: "token", account: associatedTokenAddress(owner, mint, tokenProgram), owner, mint, amount: raw };
+  return {
+    kind: "token",
+    account: await associatedTokenAddress(owner, mint, tokenProgram),
+    owner,
+    mint,
+    amount: raw,
+  };
 }
 
 /** Apply funding cheatcodes on the surfnet; returns what was applied for reporting. */

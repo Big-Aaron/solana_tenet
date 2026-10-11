@@ -1,8 +1,6 @@
-import { PublicKey } from "@solana/web3.js";
-
 import { fetchAccounts } from "./accounts.js";
 import { CLOCK_SYSVAR, decodeClock, withClock } from "./clock.js";
-import { createConnection, rpcRequest } from "./rpc.js";
+import { createRpc } from "./rpc.js";
 import { durableNonceAccount, withNonceBlockhash } from "./transaction.js";
 
 const INTERNAL_ERROR = -32603;
@@ -25,7 +23,7 @@ async function loadSurfnetClass() {
  */
 export async function openSurfnet({ rpcUrl, surfnetUrl }) {
   if (surfnetUrl) {
-    return { url: surfnetUrl, embedded: false, connection: createConnection(surfnetUrl), stop() {} };
+    return { url: surfnetUrl, embedded: false, connection: createRpc(surfnetUrl), stop() {} };
   }
   const Surfnet = await loadSurfnetClass();
   const instance = Surfnet.startWithConfig({ offline: false, remoteRpcUrl: rpcUrl });
@@ -38,7 +36,7 @@ export async function openSurfnet({ rpcUrl, surfnetUrl }) {
     instance.stop();
   };
   process.once("SIGINT", onSignal);
-  return { url: instance.rpcUrl, embedded: true, connection: createConnection(instance.rpcUrl), stop };
+  return { url: instance.rpcUrl, embedded: true, connection: createRpc(instance.rpcUrl), stop };
 }
 
 export async function setAccount(connection, pubkey, { lamports, data, owner, executable }) {
@@ -55,11 +53,11 @@ export async function setAccount(connection, pubkey, { lamports, data, owner, ex
   if (executable !== undefined) {
     update.executable = executable;
   }
-  await rpcRequest(connection, "surfnet_setAccount", [pubkey, update]);
+  await connection.surfnet_setAccount(pubkey, update).send();
 }
 
 export async function setTokenAccount(connection, owner, mint, update, tokenProgram) {
-  await rpcRequest(connection, "surfnet_setTokenAccount", [owner, mint, update, tokenProgram]);
+  await connection.surfnet_setTokenAccount(owner, mint, update, tokenProgram).send();
 }
 
 /**
@@ -73,14 +71,14 @@ export async function alignDurableNonce(connection, tx) {
   if (!nonce) {
     return null;
   }
-  const info = await connection.getAccountInfo(new PublicKey(nonce));
+  const { value: info } = await connection.getAccountInfo(nonce, { encoding: "base64" }).send();
   if (!info) {
     throw new Error(`Durable nonce account not found: ${nonce}`);
   }
   await setAccount(connection, nonce, {
     lamports: info.lamports,
-    data: withNonceBlockhash(info.data, tx.message.recentBlockhash),
-    owner: info.owner.toBase58(),
+    data: withNonceBlockhash(Buffer.from(info.data[0], "base64"), tx.message.recentBlockhash),
+    owner: info.owner,
   });
   return nonce;
 }
@@ -106,7 +104,7 @@ export async function simulate(connection, wire, { sigVerify, replaceRecentBlock
     config.accounts = { encoding: "base64", addresses: accounts };
   }
   try {
-    const result = await rpcRequest(connection, "simulateTransaction", [wire.toString("base64"), config]);
+    const result = await connection.simulateTransaction(wire.toString("base64"), config).send();
     return { slot: result.context.slot, value: result.value };
   } catch (error) {
     if (error.code === INTERNAL_ERROR) {

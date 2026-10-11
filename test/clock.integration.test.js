@@ -2,9 +2,19 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { Keypair, Transaction, TransactionInstruction } from "@solana/web3.js";
+import {
+  appendTransactionMessageInstruction,
+  createKeyPairSignerFromBytes,
+  createTransactionMessage,
+  generateKeyPairSigner,
+  getTransactionEncoder,
+  pipe,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  signTransactionMessageWithSigners,
+} from "@solana/kit";
 
-import { createConnection } from "../src/core/rpc.js";
+import { createRpc } from "../src/core/rpc.js";
 import { overrideClock, simulate } from "../src/core/surfnet.js";
 
 const PROBE_SO = new URL("./fixtures/clock_probe.so", import.meta.url).pathname;
@@ -22,27 +32,31 @@ describe("clock override", { skip: Surfnet ? false : "@solana/surfpool unavailab
   let instance;
   let connection;
   let payer;
-  const programId = Keypair.generate().publicKey;
+  let programId;
 
-  before(() => {
+  before(async () => {
+    programId = (await generateKeyPairSigner()).address;
     instance = Surfnet.startWithConfig(
       REMOTE_RPC_URL ? { offline: false, remoteRpcUrl: REMOTE_RPC_URL } : { offline: true },
     );
-    instance.deploy({ programId: programId.toBase58(), soPath: PROBE_SO });
-    payer = Keypair.fromSecretKey(Uint8Array.from(instance.payerSecretKey));
-    connection = createConnection(instance.rpcUrl);
+    instance.deploy({ programId, soPath: PROBE_SO });
+    payer = await createKeyPairSignerFromBytes(Uint8Array.from(instance.payerSecretKey));
+    connection = createRpc(instance.rpcUrl);
   });
 
   after(() => instance.stop());
 
   /** Clock as read by a program during simulation (see fixtures/clock_probe). */
   async function programClock() {
-    const { blockhash } = await connection.getLatestBlockhash();
-    const tx = new Transaction({ feePayer: payer.publicKey, recentBlockhash: blockhash }).add(
-      new TransactionInstruction({ programId, keys: [], data: Buffer.alloc(0) }),
+    const { value: latestBlockhash } = await connection.getLatestBlockhash().send();
+    const message = pipe(
+      createTransactionMessage({ version: "legacy" }),
+      (tx) => setTransactionMessageFeePayerSigner(payer, tx),
+      (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+      (tx) => appendTransactionMessageInstruction({ programAddress: programId }, tx),
     );
-    tx.sign(payer);
-    const { value } = await simulate(connection, tx.serialize(), {
+    const signed = await signTransactionMessageWithSigners(message);
+    const { value } = await simulate(connection, Buffer.from(getTransactionEncoder().encode(signed)), {
       sigVerify: false,
       replaceRecentBlockhash: true,
       accounts: [],

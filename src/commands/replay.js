@@ -1,6 +1,6 @@
 import { fromMeta } from "../core/execution.js";
 import { buildReport } from "../core/report.js";
-import { createConnection, fetchTransaction, resolveRpcUrl } from "../core/rpc.js";
+import { createRpc, fetchTransaction, resolveRpcUrl } from "../core/rpc.js";
 import { decodeTransaction, describeTransaction, parseSignature } from "../core/transaction.js";
 import { status } from "../utils/diagnostics.js";
 import { printReport } from "./output.js";
@@ -15,7 +15,7 @@ export async function runReplay(signatureArg, opts) {
   const signature = parseSignature(signatureArg);
 
   status(`Fetching transaction ${signature} ...`);
-  const fetched = await fetchTransaction(createConnection(rpcUrl), signature);
+  const fetched = await fetchTransaction(createRpc(rpcUrl), signature);
   const tx = decodeTransaction(fetched.wire);
   const txInfo = describeTransaction(tx, fetched.wire, fetched.meta?.loadedAddresses ?? null);
   const keys = txInfo.accounts.map((account) => account.pubkey);

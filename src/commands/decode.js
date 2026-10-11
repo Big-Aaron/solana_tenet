@@ -1,4 +1,4 @@
-import { createConnection, resolveRpcUrl } from "../core/rpc.js";
+import { createRpc, resolveRpcUrl } from "../core/rpc.js";
 import {
   decodeTransaction,
   describeLookups,
@@ -48,7 +48,7 @@ export async function runDecode(txArg, opts) {
   const rpcUrl = resolveRpcUrl(opts.rpcUrl);
   const { wire, fetched } = await loadTransaction(await readTransactionInput(txArg), rpcUrl);
   const tx = decodeTransaction(wire);
-  const connection = createConnection(rpcUrl);
+  const connection = createRpc(rpcUrl);
   const loadedAddresses = await resolveAddresses(connection, tx, fetched);
   printDecode(
     buildDecodeModel({
