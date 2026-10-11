@@ -1,6 +1,6 @@
 # Tenet — Solana transaction decode, simulate, and replay
 
-Tenet is a Node.js CLI that inspects Solana transactions. The design follows [sonar](../sonar).
+Tenet is a Node.js CLI that inspects Solana transactions. The design follows [sonar](https://github.com/okxlabs/sonar).
 
 - `decode` shows the accounts and instructions in a transaction. It does not execute the transaction.
 - `simulate` executes a transaction on a local [Surfpool](https://github.com/solana-foundation/surfpool) surfnet. The surfnet forks mainnet or any RPC. It loads accounts on demand. SOL and token funding cheatcodes set balances before the run.
