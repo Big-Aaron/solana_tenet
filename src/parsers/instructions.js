@@ -13,7 +13,8 @@ import {
 /**
  * Decoded instruction: `{ name, accountNames, fields }`. `accountNames` labels
  * the instruction's accounts by position; `fields` holds decoded arguments.
- * An Anchor match also sets `idlAccounts` and `remainingAccounts`.
+ * An Anchor match also sets `idlAccounts` and `remainingAccounts`. Its `fields`
+ * are the IDL args. `argsDecoded: false` means those bytes did not match.
  */
 function decoded(name, accountNames = [], fields = {}) {
   return { name, accountNames, fields };

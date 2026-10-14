@@ -59,11 +59,11 @@ node bin/tenet.js decode <SIGNATURE> --idl ./idls/<PROGRAM_ID>.json --json
 
 Tenet matches the first 8 instruction bytes to the IDL discriminator. A legacy IDL with no discriminator uses `sha256("global:<name>")`. Nested structs flatten to `pool.vault`. Accounts after the IDL list are `remaining[0]`, `remaining[1]`, and so on. An optional account set to the program id is `(none)`. A named account the transaction omits is `(missing)`.
 
-System, Compute Budget, SPL Token, Token-2022, ATA, and Memo keep their builtin decoders. Anchor instruction arguments stay raw bytes.
+System, Compute Budget, SPL Token, Token-2022, ATA, and Memo keep their builtin decoders. `--idl` Borsh-decodes Anchor instruction arguments into `parsed.fields`, including structs, enums, vectors, and options. Integers wider than 32 bits stay exact. Arguments that do not match the IDL stay raw, and the account names are still shown.
 
 In text output, account markers are `[<sig><perm><exe>]`: `s` signer, `w`/`r` writable/read-only, `x` program. `[n]` is the transaction account index. `decode` always prints instruction details. `simulate` and `replay` print them with `-d`.
 
-JSON for an Anchor instruction puts named accounts on `parsed.accounts` and the rest on `parsed.remainingAccounts`.
+JSON for an Anchor instruction puts named accounts on `parsed.accounts`, the rest on `parsed.remainingAccounts`, and arguments on `parsed.fields`.
 
 ## IDL command
 
@@ -94,5 +94,5 @@ Clock flags change only the Clock sysvar. They do not restore old account data. 
 
 - Do not sign or send transactions. Tenet only reads and simulates.
 - Do not treat a failed simulation as a process failure. Check the report.
-- Do not expect `--idl` to decode Anchor arguments or override builtin programs.
+- Do not expect `--idl` to override builtin programs.
 - Do not expect `idl sync` to publish a local IDL.

@@ -1,6 +1,6 @@
 {
   "name": "solana-tenet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Solana transaction decode, simulate, and replay CLI powered by Surfpool and @solana/kit",
   "type": "module",
   "bin": {

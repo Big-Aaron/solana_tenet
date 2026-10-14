@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 
 import bs58 from "bs58";
 
+import { decodeIdlArgs } from "./idl-args.js";
+
 const DISCRIMINATOR_LEN = 8;
 
 function isPubkey(text) {
@@ -102,13 +104,31 @@ export function parseIdl(idl, programId = null) {
     instructions.set(key, {
       name: ix.name,
       accounts: flattenAccounts(ix.accounts ?? []),
+      args: Array.isArray(ix.args) ? ix.args : [],
     });
   }
   return {
     programId: address,
     name: idl.metadata?.name ?? idl.name ?? null,
     instructions,
+    types: indexTypes(idl),
   };
+}
+
+function indexTypes(idl) {
+  const types = new Map();
+  const add = (item) => {
+    if (item?.name && item.type) {
+      types.set(item.name, item.type);
+    }
+  };
+  for (const item of idl.accounts ?? []) {
+    add(item);
+  }
+  for (const item of idl.types ?? []) {
+    add(item);
+  }
+  return types;
 }
 
 /** Load `--idl` specs into a map keyed by program id. `null` when none were given. */
@@ -164,9 +184,10 @@ function namedAccount(meta, extra) {
 }
 
 /**
- * Match `data`'s 8-byte discriminator and split `accountPubkeys` into the
- * IDL's named accounts and Anchor `remaining_accounts`.
+ * Match `data`'s 8-byte discriminator, split `accountPubkeys` into the IDL's
+ * named accounts and Anchor `remaining_accounts`, and Borsh-decode `args`.
  * An optional account set to the program id is absent (`present: false`).
+ * Args that do not match the IDL leave `fields` empty and set `argsDecoded: false`.
  * Returns `null` when no IDL instruction matches.
  */
 export function decodeAnchorInstruction(idls, programId, data, accountPubkeys = []) {
@@ -198,11 +219,21 @@ export function decodeAnchorInstruction(idls, programId, data, accountPubkeys = 
     ...remainingAccounts.map((account) => account.name),
   ];
 
+  let fields = {};
+  let argsDecoded = true;
+  try {
+    fields = decodeIdlArgs(program.types, ix.args, data);
+  } catch {
+    fields = {};
+    argsDecoded = false;
+  }
+
   return {
     name: ix.name,
     ...(program.name ? { programName: program.name } : {}),
     accountNames,
-    fields: {},
+    fields,
+    ...(argsDecoded ? {} : { argsDecoded: false }),
     idlAccounts,
     remainingAccounts,
   };

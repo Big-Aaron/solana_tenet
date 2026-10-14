@@ -20,10 +20,22 @@ function instructionLabel(programId, parsed) {
 }
 
 function formatField(value) {
-  if (typeof value === "bigint" || typeof value === "number") {
+  if (typeof value === "bigint") {
+    return value.toLocaleString("en-US");
+  }
+  if (typeof value === "number") {
     return formatInt(value);
   }
-  return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+  if (typeof value === "object" && value !== null) {
+    const max = BigInt(Number.MAX_SAFE_INTEGER);
+    return JSON.stringify(value, (_key, item) => {
+      if (typeof item !== "bigint") {
+        return item;
+      }
+      return item <= max && item >= -max ? Number(item) : item.toString();
+    });
+  }
+  return String(value);
 }
 
 function header({ tx, execution, computeUnitLimit }) {
@@ -151,7 +163,7 @@ function instructionBody(ix, accounts, opts, indent) {
   for (const [key, value] of Object.entries(ix.parsed?.fields ?? {})) {
     lines.push(`${indent}${paint("dim", key)}  ${formatField(value)}`);
   }
-  if (ix.data && (opts.rawIxData || !ix.parsed)) {
+  if (ix.data && (opts.rawIxData || !ix.parsed || ix.parsed.argsDecoded === false)) {
     lines.push(`${indent}${paint("dim", "data")}  ${ix.data.length > 0 ? hex(ix.data) : "(empty)"}`);
   }
   return lines;

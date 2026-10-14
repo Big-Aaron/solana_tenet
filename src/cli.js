@@ -22,7 +22,7 @@ function addRpcOption(command) {
 function addIdlOption(command) {
   return command.option(
     "--idl <SPEC>",
-    "Anchor IDL JSON for accounts and remaining accounts (repeatable): <PATH> or <PROGRAM_ID>=<PATH>",
+    "Anchor IDL JSON for accounts, remaining accounts, and args (repeatable): <PATH> or <PROGRAM_ID>=<PATH>",
     collect,
     [],
   );

@@ -99,7 +99,7 @@ Tenet detects `TX` as a signature or an encoded transaction. It fetches a signat
 | `-t, --timestamp <TIMESTAMP>` | Pin `Clock.unix_timestamp`. Use Unix seconds (`1700000000`) or an RFC3339 time (`2024-01-01T00:00:00Z`). |
 | `--at-tx-time` | Pin the clock to the slot and block time of the fetched transaction. This applies only to a signature. `--slot` or `--timestamp` overrides this option. |
 | `--check-sig` | Enable signature verification. Tenet does not replace the recent blockhash. |
-| `--idl <SPEC>` | Anchor IDL JSON. Names this program's accounts and remaining accounts. Repeat for several programs. `<PATH>` or `<PROGRAM_ID>=<PATH>`. |
+| `--idl <SPEC>` | Anchor IDL JSON. Names accounts and remaining accounts, and decodes instruction arguments. Repeat for several programs. `<PATH>` or `<PROGRAM_ID>=<PATH>`. |
 
 Tenet reads an integer token amount as a raw unit (`1000000`). Tenet reads an amount that contains a dot in the mint decimals (`1.5`). Tenet detects SPL Token and Token-2022 from the mint owner.
 
@@ -130,11 +130,11 @@ Tenet fetches a signature with `getTransaction`. It reads lookup addresses from 
 | Option | Description |
 |--------|-------------|
 | `-u, --rpc-url <URL>` | Fetch a signature and resolve lookup tables. |
-| `--idl <SPEC>` | Anchor IDL JSON. Names this program's accounts and remaining accounts. Repeat for several programs. `<PATH>` or `<PROGRAM_ID>=<PATH>`. |
+| `--idl <SPEC>` | Anchor IDL JSON. Names accounts and remaining accounts, and decodes instruction arguments. Repeat for several programs. `<PATH>` or `<PROGRAM_ID>=<PATH>`. |
 | `--raw-ix-data` | Print raw instruction data, including data that Tenet already decoded. |
 | `--json` | Write one JSON document to stdout. |
 
-`simulate` and `replay` accept the same `--idl` flag. Tenet matches the first 8 bytes of instruction data to an IDL discriminator. A legacy IDL with no discriminator uses `sha256("global:<name>")`. Nested account structs are flattened, so a field named `vault` inside `pool` is labeled `pool.vault`. Accounts after that list are `remaining[0]`, `remaining[1]`, and so on. An optional account set to the program id is absent and shown as `(none)`. A named account the transaction does not include is `(missing)`. System, Token, and the other builtin decoders stay in front of the IDL. Anchor instruction arguments stay raw. Fetch the file with `idl fetch`, described below.
+`simulate` and `replay` accept the same `--idl` flag. Tenet matches the first 8 bytes of instruction data to an IDL discriminator. A legacy IDL with no discriminator uses `sha256("global:<name>")`. Nested account structs are flattened, so a field named `vault` inside `pool` is labeled `pool.vault`. Accounts after that list are `remaining[0]`, `remaining[1]`, and so on. An optional account set to the program id is absent and shown as `(none)`. A named account the transaction does not include is `(missing)`. System, Token, and the other builtin decoders stay in front of the IDL. The bytes after the discriminator are decoded as the IDL arguments, including structs, enums, vectors, and options. Integers wider than 32 bits stay exact. Arguments that do not match the IDL are left as raw instruction data. Fetch the file with `idl fetch`, described below.
 
 ### `replay`
 
@@ -262,7 +262,7 @@ Layout:
 - `src/cli.js` defines the commands.
 - `src/commands/` runs `decode`, `simulate`, `replay`, and `idl`.
 - `src/core/` reads the RPC and parses transactions. It runs the surfnet lifecycle and cheatcodes. It funds accounts and records account snapshots. It normalizes execution results and assembles the report.
-- `src/parsers/` defines known programs and decodes instructions, including Anchor accounts from an IDL. It builds an execution tree from logs.
+- `src/parsers/` defines known programs and decodes instructions, including Anchor accounts and arguments from an IDL. It builds an execution tree from logs.
 - `src/output/` renders text and JSON.
 - `.cursor/skills/tenet/SKILL.md` tells an agent how to run Tenet. Install it with `npx skills add Big-Aaron/solana_tenet --skill tenet`.
 
@@ -270,7 +270,7 @@ Layout:
 
 - Each simulation runs one transaction. Tenet does not run bundles.
 - Tenet does not load program or account overrides from files.
-- `--idl` names Anchor accounts and remaining accounts. Anchor instruction arguments stay raw.
+- `--idl` names Anchor accounts and remaining accounts, and decodes instruction arguments that match the IDL.
 - `simulate` always runs against the latest forked state. Clock pinning does not restore historical accounts.
 
 ## License

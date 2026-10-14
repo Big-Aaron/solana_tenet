@@ -206,6 +206,112 @@ describe("Anchor IDL accounts", () => {
     assert.equal(parsed.idlAccounts[1].name, "state.vault");
   });
 
+  it("decodes instruction args, including structs, enums, and options", () => {
+    const owner = pubkey(7);
+    const u64 = (value) => {
+      const bytes = Buffer.alloc(8);
+      bytes.writeBigUInt64LE(value);
+      return bytes;
+    };
+    const idl = {
+      address: program,
+      metadata: { name: "demo", spec: "0.1.0" },
+      instructions: [
+        {
+          name: "swap",
+          discriminator: DISC,
+          accounts: [{ name: "user", signer: true, writable: true }],
+          args: [
+            { name: "amount_in", type: "u64" },
+            { name: "side", type: { defined: { name: "Side" } } },
+            { name: "memo", type: { option: "string" } },
+            { name: "owner", type: "publicKey" },
+            { name: "flags", type: { vec: { defined: "Flag" } } },
+            { name: "pad", type: { array: ["u8", 2] } },
+          ],
+        },
+      ],
+      types: [
+        {
+          name: "Side",
+          type: {
+            kind: "enum",
+            variants: [{ name: "Bid" }, { name: "Ask", fields: [{ name: "limit", type: "u64" }] }],
+          },
+        },
+        { name: "Flag", type: { kind: "enum", variants: [{ name: "None" }, { name: "Set" }] } },
+      ],
+    };
+    const data = Buffer.concat([
+      Buffer.from(DISC),
+      u64(1000n),
+      Buffer.from([1]),
+      u64(7n),
+      Buffer.from([1, 2, 0, 0, 0]),
+      Buffer.from("hi"),
+      Buffer.from(bs58.decode(owner)),
+      Buffer.from([2, 0, 0, 0, 0, 1]),
+      Buffer.from([9, 8]),
+    ]);
+    const parsed = decodeInstruction(program, data, {
+      idls: idlMap(idl),
+      accounts: [user],
+    });
+    assert.equal(parsed.accountNames[0], "user");
+    assert.equal(parsed.argsDecoded, undefined);
+    assert.equal(parsed.fields.amount_in, 1000n);
+    assert.deepEqual(parsed.fields.side, { Ask: { limit: 7n } });
+    assert.equal(parsed.fields.memo, "hi");
+    assert.equal(parsed.fields.owner, owner);
+    assert.deepEqual(parsed.fields.flags, ["None", "Set"]);
+    assert.deepEqual(parsed.fields.pad, [9, 8]);
+
+    const text = renderInstructionDetails(
+      {
+        accounts: [{ pubkey: user, signer: true, writable: true, executable: false }],
+        instructions: [
+          {
+            index: 0,
+            programId: program,
+            accountIndexes: [0],
+            accounts: [user],
+            data,
+            parsed,
+          },
+        ],
+      },
+      {},
+    ).join("\n");
+    assert.match(text, /amount_in {2}1,000/);
+    assert.match(text, /side {2}\{"Ask":\{"limit":7\}\}/);
+    assert.doesNotMatch(text, /\n {4}data {2}/);
+
+    const broken = decodeInstruction(program, Buffer.concat([Buffer.from(DISC), Buffer.from([1, 2, 3, 4])]), {
+      idls: idlMap(idl),
+      accounts: [user],
+    });
+    assert.equal(broken.accountNames[0], "user");
+    assert.equal(broken.argsDecoded, false);
+    assert.deepEqual(broken.fields, {});
+    const raw = renderInstructionDetails(
+      {
+        accounts: [{ pubkey: user, signer: true, writable: true, executable: false }],
+        instructions: [
+          {
+            index: 0,
+            programId: program,
+            accountIndexes: [0],
+            accounts: [user],
+            data: Buffer.concat([Buffer.from(DISC), Buffer.from([1, 2, 3, 4])]),
+            parsed: broken,
+          },
+        ],
+      },
+      {},
+    ).join("\n");
+    assert.match(raw, /data {2}0x/);
+  });
+
   it("leaves builtin instructions on their built-in decoder", () => {
     const data = Buffer.alloc(12);
     data.writeUInt32LE(2, 0);
