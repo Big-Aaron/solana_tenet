@@ -1,6 +1,6 @@
 # Tenet — Solana transaction decode, simulate, replay, and Anchor IDL
 
-Tenet is a Node.js CLI that inspects Solana transactions. The design follows [sonar](https://github.com/okxlabs/sonar).
+Tenet is a Node.js CLI that inspects Solana transactions. Install it from npm as [`solana-tenet`](https://www.npmjs.com/package/solana-tenet). The design follows [sonar](https://github.com/okxlabs/sonar).
 
 - `decode` shows the accounts and instructions in a transaction. It does not execute the transaction.
 - `simulate` executes a transaction on a local [Surfpool](https://github.com/solana-foundation/surfpool) surfnet. The surfnet forks mainnet or any RPC. It loads accounts on demand. SOL and token funding cheatcodes set balances before the run.
@@ -18,15 +18,37 @@ Tenet is a Node.js CLI that inspects Solana transactions. The design follows [so
 
 ## Installation
 
-Tenet requires Node.js 22.13 or later.
+Tenet requires Node.js 22.13 or later. The npm package is [`solana-tenet`](https://www.npmjs.com/package/solana-tenet). The command name is `tenet`.
 
 ```bash
-cd solana_tenet
+npm install -g solana-tenet
+tenet --help
+```
+
+Run one command without a global install:
+
+```bash
+npx solana-tenet decode <SIGNATURE>
+```
+
+From a checkout of this repository:
+
+```bash
 npm install
 npm link        # optional. This adds tenet to PATH. Or run: node bin/tenet.js
 ```
 
 `@solana/surfpool` supplies the embedded surfnet. It includes native binaries for macOS (x64 and arm64) and Linux x64 (glibc). On other platforms, run `surfpool start` yourself. Then pass `--surfnet-url`.
+
+## Agent skill
+
+The skill at `.cursor/skills/tenet/SKILL.md` tells an agent how to run Tenet. A checkout of this repository already includes it. Install the same skill into another project:
+
+```bash
+npx skills add Big-Aaron/solana_tenet --skill tenet
+```
+
+Add `-g` to install it for every project on this machine.
 
 ## Quick start
 
@@ -242,6 +264,7 @@ Layout:
 - `src/core/` reads the RPC and parses transactions. It runs the surfnet lifecycle and cheatcodes. It funds accounts and records account snapshots. It normalizes execution results and assembles the report.
 - `src/parsers/` defines known programs and decodes instructions, including Anchor accounts from an IDL. It builds an execution tree from logs.
 - `src/output/` renders text and JSON.
+- `.cursor/skills/tenet/SKILL.md` tells an agent how to run Tenet. Install it with `npx skills add Big-Aaron/solana_tenet --skill tenet`.
 
 ## Limitations (v0.1)
 
