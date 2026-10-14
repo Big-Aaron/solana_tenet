@@ -1,10 +1,11 @@
-# Tenet — Solana transaction decode, simulate, and replay
+# Tenet — Solana transaction decode, simulate, replay, and Anchor IDL
 
 Tenet is a Node.js CLI that inspects Solana transactions. The design follows [sonar](https://github.com/okxlabs/sonar).
 
 - `decode` shows the accounts and instructions in a transaction. It does not execute the transaction.
 - `simulate` executes a transaction on a local [Surfpool](https://github.com/solana-foundation/surfpool) surfnet. The surfnet forks mainnet or any RPC. It loads accounts on demand. SOL and token funding cheatcodes set balances before the run.
 - `replay` shows a confirmed transaction from its on-chain metadata. It does not execute the transaction.
+- `idl` fetches an Anchor IDL, refreshes local `<PROGRAM_ID>.json` files from the chain, or derives the IDL account address.
 
 `simulate` and `replay` share one report:
 
@@ -44,8 +45,12 @@ tenet sim <TX> -b -d
 tenet decode <SIGNATURE>
 tenet dec <BASE64_TX> --json
 
+# Name Anchor accounts from an IDL, then decode the transaction.
+tenet idl fetch <PROGRAM_ID> -o ./idls
+tenet decode <SIGNATURE> --idl ./idls/<PROGRAM_ID>.json
+
 # Show a confirmed transaction from on-chain metadata.
-tenet replay <SIGNATURE> -b
+tenet replay <SIGNATURE> -b --idl ./idls/<PROGRAM_ID>.json
 
 # Write JSON to stdout.
 tenet replay <SIGNATURE> --json | jq .status
@@ -72,6 +77,7 @@ Tenet detects `TX` as a signature or an encoded transaction. It fetches a signat
 | `-t, --timestamp <TIMESTAMP>` | Pin `Clock.unix_timestamp`. Use Unix seconds (`1700000000`) or an RFC3339 time (`2024-01-01T00:00:00Z`). |
 | `--at-tx-time` | Pin the clock to the slot and block time of the fetched transaction. This applies only to a signature. `--slot` or `--timestamp` overrides this option. |
 | `--check-sig` | Enable signature verification. Tenet does not replace the recent blockhash. |
+| `--idl <SPEC>` | Anchor IDL JSON. Names this program's accounts and remaining accounts. Repeat for several programs. `<PATH>` or `<PROGRAM_ID>=<PATH>`. |
 
 Tenet reads an integer token amount as a raw unit (`1000000`). Tenet reads an amount that contains a dot in the mint decimals (`1.5`). Tenet detects SPL Token and Token-2022 from the mint owner.
 
@@ -102,8 +108,11 @@ Tenet fetches a signature with `getTransaction`. It reads lookup addresses from 
 | Option | Description |
 |--------|-------------|
 | `-u, --rpc-url <URL>` | Fetch a signature and resolve lookup tables. |
+| `--idl <SPEC>` | Anchor IDL JSON. Names this program's accounts and remaining accounts. Repeat for several programs. `<PATH>` or `<PROGRAM_ID>=<PATH>`. |
 | `--raw-ix-data` | Print raw instruction data, including data that Tenet already decoded. |
 | `--json` | Write one JSON document to stdout. |
+
+`simulate` and `replay` accept the same `--idl` flag. Tenet matches the first 8 bytes of instruction data to an IDL discriminator. A legacy IDL with no discriminator uses `sha256("global:<name>")`. Nested account structs are flattened, so a field named `vault` inside `pool` is labeled `pool.vault`. Accounts after that list are `remaining[0]`, `remaining[1]`, and so on. An optional account set to the program id is absent and shown as `(none)`. A named account the transaction does not include is `(missing)`. System, Token, and the other builtin decoders stay in front of the IDL. Anchor instruction arguments stay raw. Fetch the file with `idl fetch`, described below.
 
 ### `replay`
 
@@ -113,7 +122,73 @@ tenet replay <SIGNATURE> [options]
 
 Tenet fetches the transaction and its metadata (`getTransaction`, `maxSupportedTransactionVersion: 1`). It shows logs, inner instructions, compute units, the fee, and balance changes from that metadata.
 
-Tenet reads lookup table addresses from the historical `meta.loadedAddresses`. It does not read live tables.
+Tenet reads lookup table addresses from the historical `meta.loadedAddresses`. It does not read live tables. `replay` accepts `--idl` and the output options in the next section.
+
+### `idl`
+
+```
+tenet idl fetch <PROGRAM_ID>... [options]
+tenet idl sync <PATH> [options]
+tenet idl address <PROGRAM_ID> [options]
+```
+
+`idl` follows [sonar](https://github.com/okxlabs/sonar)'s `idl` command. It reads the Anchor IDL account:
+
+```
+createWithSeed(findProgramAddress([], program), "anchor:idl", program)
+```
+
+The account data is an 8-byte discriminator, a 32-byte authority, a little-endian length, and zlib-compressed IDL JSON. Tenet writes that JSON as `<PROGRAM_ID>.json`.
+
+```bash
+# stdout is the file that was written.
+tenet idl fetch <PROGRAM_ID> -o ./idls
+
+# A program with no IDL account is a warning. The command still exits 0.
+tenet idl fetch <PROGRAM_ID_1> <PROGRAM_ID_2> -o ./idls
+
+# Re-fetch every <PROGRAM_ID>.json in a directory. Other names are skipped.
+tenet idl sync ./idls
+
+# Re-fetch one file. The file name must be <PROGRAM_ID>.json.
+tenet idl sync ./idls/<PROGRAM_ID>.json
+
+# Print the IDL account address. This does not call an RPC.
+tenet idl address <PROGRAM_ID>
+```
+
+`sync` replaces those files with the IDL currently stored on chain.
+
+Without `-o`, `fetch` writes to `TENET_IDL_DIR`, or to the working directory when that variable is unset. `sync` writes back into the directory that holds the source file. `TENET_IDL_DIR` does not change the `sync` destination.
+
+`fetch` and `sync` exit 0 when some programs have no IDL or the account cannot be decoded. They exit 1 when a program ID is invalid, the sync path is missing, or Tenet cannot create or write the output file. stdout lists only the files that were written, one path per line. Each missing IDL prints `warning: no IDL found: <PROGRAM_ID>` on stderr, then a summary line: `warning: Summary: N fetched, N not found, N error(s)`.
+
+`--json` on `fetch` and `sync` prints one array. `status` is `ok`, `not_found`, or `error`. `path` is `null` unless `status` is `ok`.
+
+```json
+[
+  {
+    "program": "<PROGRAM_ID>",
+    "path": "idls/<PROGRAM_ID>.json",
+    "status": "ok"
+  }
+]
+```
+
+`--json` on `address` prints one object:
+
+```json
+{
+  "program": "<PROGRAM_ID>",
+  "idl_address": "<IDL_ACCOUNT>"
+}
+```
+
+| Option | Commands | Description |
+|--------|----------|-------------|
+| `-u, --rpc-url <URL>` | `fetch`, `sync` | RPC used to read IDL accounts. |
+| `-o, --output-dir <DIR>` | `fetch`, `sync` | Directory for `<PROGRAM_ID>.json`. |
+| `-j, --json` | `fetch`, `sync`, `address` | Write one JSON document to stdout. |
 
 ### Output options (`simulate` and `replay`)
 
@@ -125,7 +200,7 @@ Tenet reads lookup table addresses from the historical `meta.loadedAddresses`. I
 | `--raw-ix-data` | Print raw instruction data, including data that Tenet already decoded. |
 | `--json` | Write one JSON document to stdout. |
 
-Tenet decodes instruction names and fields for System, Compute Budget, SPL Token, Token-2022, Associated Token Account, and Memo. It labels other known programs by name.
+Tenet decodes instruction names and fields for System, Compute Budget, SPL Token, Token-2022, Associated Token Account, and Memo. It labels other known programs by name. `--idl` adds Anchor account names and remaining accounts for other programs.
 
 In `-d` output, an account marker has the form `[<sig><perm><exe>]`.
 
@@ -133,7 +208,7 @@ In `-d` output, an account marker has the form `[<sig><perm><exe>]`.
 - `w` means writable. `r` means read-only.
 - `x` means program. `-` means not a program.
 
-`[n]` is the account index in the transaction.
+`[n]` is the account index in the transaction. `decode` uses the same marker. With `--idl`, named accounts and remaining accounts are separate blocks under the instruction.
 
 ## Output conventions
 
@@ -141,12 +216,14 @@ In `-d` output, an account marker has the form `[<sig><perm><exe>]`.
 - With `--json`, stdout is one valid JSON document. Tenet writes amounts that may exceed 2^53 as strings.
 - Tenet disables colors when stdout is not a TTY. Tenet also disables colors when `NO_COLOR` is present.
 - When a simulated transaction fails, the process still exits 0. The command exits 1 only when it cannot run.
+- `idl fetch` and `idl sync` exit 0 when a program has no IDL or its account cannot be decoded. They exit 1 when the command cannot run.
 
 ## Environment
 
 | Variable | Description |
 |----------|-------------|
 | `TENET_RPC_URL`, `SOLANA_RPC_URL` | Default for `--rpc-url`. When both are unset, Tenet uses mainnet-beta. |
+| `TENET_IDL_DIR` | Default directory for `idl fetch` when `-o` is omitted. `idl sync` writes next to the source file instead. |
 | `TENET_DEBUG` | Print a stack trace when an error occurs. |
 
 The public mainnet endpoint is heavily rate-limited. A dedicated RPC makes simulations faster. It also avoids transient surfnet internal errors while the surfnet fetches accounts.
@@ -161,16 +238,16 @@ npm run test:e2e     # live tests against --rpc-url or mainnet-beta
 Layout:
 
 - `src/cli.js` defines the commands.
-- `src/commands/` runs `decode`, `simulate`, and `replay`.
+- `src/commands/` runs `decode`, `simulate`, `replay`, and `idl`.
 - `src/core/` reads the RPC and parses transactions. It runs the surfnet lifecycle and cheatcodes. It funds accounts and records account snapshots. It normalizes execution results and assembles the report.
-- `src/parsers/` defines known programs and decodes instructions. It builds an execution tree from logs.
+- `src/parsers/` defines known programs and decodes instructions, including Anchor accounts from an IDL. It builds an execution tree from logs.
 - `src/output/` renders text and JSON.
 
 ## Limitations (v0.1)
 
 - Each simulation runs one transaction. Tenet does not run bundles.
 - Tenet does not load program or account overrides from files.
-- Tenet does not decode an Anchor IDL.
+- `--idl` names Anchor accounts and remaining accounts. Anchor instruction arguments stay raw.
 - `simulate` always runs against the latest forked state. Clock pinning does not restore historical accounts.
 
 ## License

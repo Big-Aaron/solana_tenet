@@ -279,8 +279,9 @@ function tagsFor(tables, field, count) {
 /**
  * Display model of a transaction. `loadedAddresses` (from lookup tables)
  * may be `null` when unresolved; affected account slots are then `null`.
+ * `idls` is the `--idl` map used to name Anchor accounts.
  */
-export function describeTransaction(tx, wire, loadedAddresses) {
+export function describeTransaction(tx, wire, loadedAddresses, idls = null) {
   const { message } = tx;
   const staticKeys = message.staticAccountKeys;
   const accounts = [
@@ -314,13 +315,14 @@ export function describeTransaction(tx, wire, loadedAddresses) {
       accounts[ix.programIdIndex].executable = true;
     }
     const data = Buffer.from(ix.data);
+    const instructionAccounts = ix.accountKeyIndexes.map((i) => keys[i] ?? null);
     return {
       index,
       programId,
       accountIndexes: [...ix.accountKeyIndexes],
-      accounts: ix.accountKeyIndexes.map((i) => keys[i] ?? null),
+      accounts: instructionAccounts,
       data,
-      parsed: decodeInstruction(programId, data),
+      parsed: decodeInstruction(programId, data, { idls, accounts: instructionAccounts }),
     };
   });
 

@@ -6,6 +6,7 @@ import { buildReport } from "../core/report.js";
 import { resolveRpcUrl } from "../core/rpc.js";
 import { alignDurableNonce, openSurfnet, overrideClock, simulate } from "../core/surfnet.js";
 import { decodeTransaction, describeTransaction, resolveLoadedAddresses } from "../core/transaction.js";
+import { loadIdls } from "../parsers/idl.js";
 import { status, warn } from "../utils/diagnostics.js";
 import { loadTransaction, readTransactionInput } from "./input.js";
 import { printReport } from "./output.js";
@@ -43,6 +44,7 @@ export async function runSimulate(txArg, opts) {
     token: opts.fundToken.map(parseTokenFunding),
   };
   const clockOptions = parseClockOptions(opts);
+  const idls = loadIdls(opts.idl);
   const { wire, fetched } = await loadTransaction(await readTransactionInput(txArg), rpcUrl);
   const tx = decodeTransaction(wire);
   const pinClock = clockOverride(clockOptions, fetched);
@@ -56,7 +58,7 @@ export async function runSimulate(txArg, opts) {
     const fundings = await applyFundings(connection, fundingRequests);
     const durableNonce = await alignDurableNonce(connection, tx);
     const clock = pinClock ? await overrideClock(connection, pinClock) : null;
-    const txInfo = describeTransaction(tx, wire, await loadAddresses(connection, tx));
+    const txInfo = describeTransaction(tx, wire, await loadAddresses(connection, tx), idls);
     warnUnreferenced(fundings, txInfo);
     const keys = txInfo.accounts.map((account) => account.pubkey);
     const writable = keys.flatMap((pubkey, index) => (pubkey && txInfo.accounts[index].writable ? [index] : []));
@@ -79,7 +81,7 @@ export async function runSimulate(txArg, opts) {
       mode: "simulate",
       context: { rpcUrl, surfnetUrl: surfnet.url, embedded: surfnet.embedded, slot, durableNonce, fundings, clock },
       tx: txInfo,
-      execution: fromSimulation(value, keys, localBalances),
+      execution: fromSimulation(value, keys, localBalances, idls),
     });
   } finally {
     surfnet.stop();

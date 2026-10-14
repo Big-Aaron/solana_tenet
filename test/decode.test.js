@@ -97,6 +97,7 @@ describe("decode", () => {
     const { stdout } = await run(process.execPath, [CLI, "decode", "--help"], { timeout: 10_000 });
     assert.match(stdout, /without executing/);
     assert.match(stdout, /--raw-ix-data/);
+    assert.match(stdout, /--idl/);
     assert.match(stdout, /--json/);
   });
 });

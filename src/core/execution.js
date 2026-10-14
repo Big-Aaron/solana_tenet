@@ -36,7 +36,7 @@ export function formatTransactionError(err) {
   return JSON.stringify(err);
 }
 
-function normalizeInnerInstruction(ix, keys) {
+function normalizeInnerInstruction(ix, keys, idls) {
   if (ix.parsed !== undefined) {
     const parsed =
       typeof ix.parsed === "string"
@@ -47,15 +47,22 @@ function normalizeInnerInstruction(ix, keys) {
   const data = Buffer.from(bs58.decode(ix.data ?? ""));
   const stackHeight = ix.stackHeight ?? null;
   if (ix.programId) {
-    return { programId: ix.programId, accounts: ix.accounts, data, parsed: decodeInstruction(ix.programId, data), stackHeight };
+    return {
+      programId: ix.programId,
+      accounts: ix.accounts,
+      data,
+      parsed: decodeInstruction(ix.programId, data, { idls, accounts: ix.accounts }),
+      stackHeight,
+    };
   }
   const programId = keys[ix.programIdIndex] ?? null;
+  const accounts = ix.accounts.map((index) => keys[index] ?? null);
   return {
     programId,
     accountIndexes: ix.accounts,
-    accounts: ix.accounts.map((index) => keys[index] ?? null),
+    accounts,
     data,
-    parsed: decodeInstruction(programId, data),
+    parsed: decodeInstruction(programId, data, { idls, accounts }),
     stackHeight,
   };
 }
@@ -65,10 +72,10 @@ function normalizeInnerInstruction(ix, keys) {
  * `getTransaction`) or jsonParsed (pubkeys or parsed info, from surfnet's
  * `simulateTransaction`).
  */
-export function normalizeInnerInstructions(groups, keys) {
+export function normalizeInnerInstructions(groups, keys, idls = null) {
   const result = [];
   for (const group of groups ?? []) {
-    result[group.index] = group.instructions.map((ix) => normalizeInnerInstruction(ix, keys));
+    result[group.index] = group.instructions.map((ix) => normalizeInnerInstruction(ix, keys, idls));
   }
   return result;
 }
@@ -94,7 +101,7 @@ function normalizeBalances(source) {
 }
 
 /** `localBalances` fills in when the simulator does not report pre/post balances itself. */
-export function fromSimulation(value, keys, localBalances = null) {
+export function fromSimulation(value, keys, localBalances = null, idls = null) {
   return {
     success: value.err == null,
     err: value.err ?? null,
@@ -103,12 +110,12 @@ export function fromSimulation(value, keys, localBalances = null) {
     computeUnits: value.unitsConsumed ?? null,
     fee: value.fee ?? null,
     returnData: normalizeReturnData(value.returnData),
-    innerInstructions: normalizeInnerInstructions(value.innerInstructions, keys),
+    innerInstructions: normalizeInnerInstructions(value.innerInstructions, keys, idls),
     balances: normalizeBalances(value) ?? localBalances,
   };
 }
 
-export function fromMeta(meta, keys) {
+export function fromMeta(meta, keys, idls = null) {
   if (!meta) {
     return {
       success: false,
@@ -130,7 +137,7 @@ export function fromMeta(meta, keys) {
     computeUnits: meta.computeUnitsConsumed ?? null,
     fee: meta.fee ?? null,
     returnData: normalizeReturnData(meta.returnData),
-    innerInstructions: normalizeInnerInstructions(meta.innerInstructions, keys),
+    innerInstructions: normalizeInnerInstructions(meta.innerInstructions, keys, idls),
     balances: normalizeBalances(meta),
   };
 }

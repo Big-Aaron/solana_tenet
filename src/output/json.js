@@ -1,13 +1,27 @@
 import { programName } from "../parsers/programs.js";
 import { hex } from "./format.js";
 
+function serializeParsed(parsed) {
+  if (!parsed) {
+    return null;
+  }
+  return {
+    name: parsed.name,
+    ...(parsed.programName ? { programName: parsed.programName } : {}),
+    fields: parsed.fields,
+    ...(parsed.idlAccounts
+      ? { accounts: parsed.idlAccounts, remainingAccounts: parsed.remainingAccounts }
+      : {}),
+  };
+}
+
 export function serializeInstruction(ix) {
   return {
     programId: ix.programId,
-    programName: programName(ix.programId),
+    programName: programName(ix.programId) ?? ix.parsed?.programName ?? null,
     accounts: ix.accounts,
     data: ix.data ? hex(ix.data) : null,
-    parsed: ix.parsed ? { name: ix.parsed.name, fields: ix.parsed.fields } : null,
+    parsed: serializeParsed(ix.parsed),
     ...(ix.stackHeight !== undefined ? { stackHeight: ix.stackHeight } : {}),
   };
 }

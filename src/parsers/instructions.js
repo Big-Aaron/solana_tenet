@@ -1,5 +1,6 @@
 import bs58 from "bs58";
 
+import { decodeAnchorInstruction } from "./idl.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM,
   COMPUTE_BUDGET_PROGRAM,
@@ -12,6 +13,7 @@ import {
 /**
  * Decoded instruction: `{ name, accountNames, fields }`. `accountNames` labels
  * the instruction's accounts by position; `fields` holds decoded arguments.
+ * An Anchor match also sets `idlAccounts` and `remainingAccounts`.
  */
 function decoded(name, accountNames = [], fields = {}) {
   return { name, accountNames, fields };
@@ -95,9 +97,10 @@ function decodeTable(table, discriminator, data) {
 
 /**
  * Decode instruction data for the builtin and SPL programs tenet knows about.
+ * `context.idls` (from `--idl`) names Anchor accounts when no builtin matches.
  * Returns `null` for unknown programs or malformed data.
  */
-export function decodeInstruction(programId, data) {
+export function decodeInstruction(programId, data, context) {
   const bytes = Buffer.from(data ?? []);
   try {
     if (programId === SYSTEM_PROGRAM) {
@@ -121,5 +124,5 @@ export function decodeInstruction(programId, data) {
     }
     throw error;
   }
-  return null;
+  return decodeAnchorInstruction(context?.idls, programId, bytes, context?.accounts);
 }

@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { Command } from "commander";
 
 import { runDecode } from "./commands/decode.js";
+import { runIdlAddress, runIdlFetch, runIdlSync } from "./commands/idl.js";
 import { runReplay } from "./commands/replay.js";
 import { runSimulate } from "./commands/simulate.js";
 import { clearStatus } from "./utils/diagnostics.js";
@@ -18,6 +19,15 @@ function addRpcOption(command) {
   );
 }
 
+function addIdlOption(command) {
+  return command.option(
+    "--idl <SPEC>",
+    "Anchor IDL JSON for accounts and remaining accounts (repeatable): <PATH> or <PROGRAM_ID>=<PATH>",
+    collect,
+    [],
+  );
+}
+
 function addOutputOptions(command) {
   return command
     .option("-b, --show-balance-change", "Show SOL and token balance changes")
@@ -30,7 +40,7 @@ function addOutputOptions(command) {
 export function buildProgram() {
   const program = new Command()
     .name("tenet")
-    .description("Solana transaction decode, simulation (Surfpool), and replay (on-chain metadata)")
+    .description("Solana transaction decode, simulation (Surfpool), replay, and Anchor IDL tools")
     .version(version);
 
   const simulate = program
@@ -51,6 +61,7 @@ export function buildProgram() {
     .option("-t, --timestamp <TIMESTAMP>", "Pin Clock.unix_timestamp: Unix seconds or RFC3339 (2024-01-01T00:00:00Z)")
     .option("--at-tx-time", "Pin the clock to the fetched transaction's slot and block time (signature input only)")
     .option("--check-sig", "Verify transaction signatures (disables blockhash replacement)");
+  addIdlOption(simulate);
   addOutputOptions(simulate).action(runSimulate);
 
   const decode = program
@@ -58,7 +69,7 @@ export function buildProgram() {
     .alias("dec")
     .description("Decode a transaction's accounts and instructions without executing it")
     .argument("[tx]", "Transaction signature, or Base58/Base64 encoded transaction (default: read stdin)");
-  addRpcOption(decode)
+  addIdlOption(addRpcOption(decode))
     .option("--raw-ix-data", "Always print raw instruction data, even when decoded")
     .option("--json", "Print a single JSON document to stdout")
     .action(runDecode);
@@ -67,8 +78,35 @@ export function buildProgram() {
     .command("replay")
     .description("Replay a confirmed transaction from on-chain metadata (no local execution)")
     .argument("<signature>", "Transaction signature");
-  addRpcOption(replay);
+  addIdlOption(addRpcOption(replay));
   addOutputOptions(replay).action(runReplay);
+
+  const idl = program.command("idl").description("Fetch, refresh, or derive Anchor IDL accounts");
+
+  const fetchIdl = idl
+    .command("fetch")
+    .description("Fetch Anchor IDLs from on-chain accounts and write <PROGRAM_ID>.json")
+    .argument("<programs...>", "Program IDs");
+  addRpcOption(fetchIdl)
+    .option("-o, --output-dir <DIR>", "Directory for IDL files (env: TENET_IDL_DIR; default: cwd)")
+    .option("-j, --json", "Print per-program status as one JSON document")
+    .action(runIdlFetch);
+
+  const syncIdl = idl
+    .command("sync")
+    .description("Refresh on-chain IDLs for <PROGRAM_ID>.json names in a directory or one file")
+    .argument("<path>", "IDL directory or one <PROGRAM_ID>.json file");
+  addRpcOption(syncIdl)
+    .option("-o, --output-dir <DIR>", "Directory for IDL files (default: the source directory)")
+    .option("-j, --json", "Print per-program status as one JSON document")
+    .action(runIdlSync);
+
+  idl
+    .command("address")
+    .description("Derive a program's Anchor IDL account address")
+    .argument("<program>", "Program ID")
+    .option("-j, --json", "Print { program, idl_address }")
+    .action(runIdlAddress);
 
   return program;
 }

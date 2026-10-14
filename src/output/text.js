@@ -15,7 +15,7 @@ import {
 const UNRESOLVED = "<unresolved lookup>";
 
 function instructionLabel(programId, parsed) {
-  const program = programName(programId) ?? programId ?? UNRESOLVED;
+  const program = parsed?.programName ?? programName(programId) ?? programId ?? UNRESOLVED;
   return parsed ? `${program}: ${parsed.name}` : program;
 }
 
@@ -103,11 +103,48 @@ function accountRows(pubkeys, names, indexes, accounts, indent) {
   });
 }
 
+function anchorAccountLines(ix, accounts, indent) {
+  const namedCount = ix.parsed.idlAccounts.filter((account) => !account.missing).length;
+  const names = ix.parsed.accountNames ?? [];
+  const lines = [];
+  const missing = ix.parsed.idlAccounts.filter((account) => account.missing);
+  if (namedCount > 0 || missing.length > 0) {
+    lines.push(`${indent}${paint("dim", "accounts")}`);
+    lines.push(
+      ...accountRows(
+        ix.accounts.slice(0, namedCount),
+        names.slice(0, namedCount),
+        ix.accountIndexes?.slice(0, namedCount),
+        accounts,
+        `${indent}  `,
+      ),
+    );
+    for (const account of missing) {
+      lines.push(`${indent}  ${paint("dim", `(missing)  ${account.name}`)}`);
+    }
+  }
+  if (ix.accounts.length > namedCount) {
+    lines.push(`${indent}${paint("dim", "remaining accounts")}`);
+    lines.push(
+      ...accountRows(
+        ix.accounts.slice(namedCount),
+        names.slice(namedCount),
+        ix.accountIndexes?.slice(namedCount),
+        accounts,
+        `${indent}  `,
+      ),
+    );
+  }
+  return lines;
+}
+
 function instructionBody(ix, accounts, opts, indent) {
   const lines = [];
   const names = ix.parsed?.accountNames ?? [];
   lines.push(`${indent}${paint("dim", "program")}  ${ix.programId ?? UNRESOLVED}`);
-  if (ix.accounts.length > 0) {
+  if (ix.parsed?.idlAccounts) {
+    lines.push(...anchorAccountLines(ix, accounts, indent));
+  } else if (ix.accounts.length > 0) {
     lines.push(`${indent}${paint("dim", "accounts")}`);
     lines.push(...accountRows(ix.accounts, names, ix.accountIndexes, accounts, `${indent}  `));
   }

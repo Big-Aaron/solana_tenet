@@ -1,4 +1,5 @@
 import { createRpc, resolveRpcUrl } from "../core/rpc.js";
+import { loadIdls } from "../parsers/idl.js";
 import {
   decodeTransaction,
   describeLookups,
@@ -11,9 +12,9 @@ import { loadTransaction, readTransactionInput } from "./input.js";
 import { printDecode } from "./output.js";
 
 /** Display model of a transaction that has not been executed. */
-export function buildDecodeModel({ wire, loadedAddresses, context }) {
+export function buildDecodeModel({ wire, loadedAddresses, context, idls = null }) {
   const tx = decodeTransaction(wire);
-  const info = describeTransaction(tx, wire, loadedAddresses);
+  const info = describeTransaction(tx, wire, loadedAddresses, idls);
   const { tables, accountTags } = describeLookups(tx, loadedAddresses);
   return {
     context,
@@ -54,6 +55,7 @@ export async function runDecode(txArg, opts) {
     buildDecodeModel({
       wire,
       loadedAddresses,
+      idls: loadIdls(opts.idl),
       context: { rpcUrl, slot: fetched?.slot ?? null, blockTime: fetched?.blockTime ?? null },
     }),
     opts,
