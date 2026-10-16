@@ -6,6 +6,7 @@ import { runDecode } from "./commands/decode.js";
 import { runIdlAddress, runIdlFetch, runIdlSync } from "./commands/idl.js";
 import { runReplay } from "./commands/replay.js";
 import { runSimulate } from "./commands/simulate.js";
+import { runToDec } from "./commands/to-dec.js";
 import { clearStatus } from "./utils/diagnostics.js";
 
 const { version } = createRequire(import.meta.url)("../package.json");
@@ -107,6 +108,12 @@ export function buildProgram() {
     .argument("<program>", "Program ID")
     .option("-j, --json", "Print { program, idl_address }")
     .action(runIdlAddress);
+
+  program
+    .command("to-dec")
+    .description("Convert little-endian hex bytes to a decimal integer")
+    .argument("<hex>", "Little-endian hex bytes, with or without a 0x prefix")
+    .action(runToDec);
 
   return program;
 }

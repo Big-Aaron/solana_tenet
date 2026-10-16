@@ -36,8 +36,9 @@ stdout is the report. Progress, warnings, and errors go to stderr. Add `--json` 
 | Execute on a fork of current chain state | `simulate` (alias `sim`) |
 | Confirmed result from `getTransaction` metadata | `replay` |
 | Download, refresh, or derive an Anchor IDL | `idl` |
+| Little-endian hex bytes to a decimal integer | `to-dec` |
 
-`decode` and `simulate` take a signature, Base58 transaction, or Base64 transaction. Omit the argument to read stdin. `replay` takes a signature only.
+`decode` and `simulate` take a signature, Base58 transaction, or Base64 transaction. Omit the argument to read stdin. `replay` takes a signature only. `to-dec` takes little-endian hex (optional `0x`) and prints one decimal integer. `0x639b010000000000` is `105315`.
 
 ```bash
 node bin/tenet.js decode <SIGNATURE>

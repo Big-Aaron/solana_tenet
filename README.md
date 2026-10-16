@@ -6,6 +6,7 @@ Tenet is a Node.js CLI that inspects Solana transactions. Install it from npm as
 - `simulate` executes a transaction on a local [Surfpool](https://github.com/solana-foundation/surfpool) surfnet. The surfnet forks mainnet or any RPC. It loads accounts on demand. SOL and token funding cheatcodes set balances before the run.
 - `replay` shows a confirmed transaction from its on-chain metadata. It does not execute the transaction.
 - `idl` fetches an Anchor IDL, refreshes local `<PROGRAM_ID>.json` files from the chain, or derives the IDL account address.
+- `to-dec` reads little-endian hex bytes and prints the decimal integer.
 
 `simulate` and `replay` share one report:
 
@@ -212,6 +213,19 @@ Without `-o`, `fetch` writes to `TENET_IDL_DIR`, or to the working directory whe
 | `-o, --output-dir <DIR>` | `fetch`, `sync` | Directory for `<PROGRAM_ID>.json`. |
 | `-j, --json` | `fetch`, `sync`, `address` | Write one JSON document to stdout. |
 
+### `to-dec`
+
+```
+tenet to-dec <HEX>
+```
+
+`<HEX>` is little-endian bytes, with or without a `0x` prefix. The length must be a whole number of bytes. stdout is one decimal integer. Values wider than 64 bits stay exact.
+
+```bash
+tenet to-dec 0x639b010000000000
+# 105315
+```
+
 ### Output options (`simulate` and `replay`)
 
 | Option | Description |
@@ -260,7 +274,7 @@ npm run test:e2e     # live tests against --rpc-url or mainnet-beta
 Layout:
 
 - `src/cli.js` defines the commands.
-- `src/commands/` runs `decode`, `simulate`, `replay`, and `idl`.
+- `src/commands/` runs `decode`, `simulate`, `replay`, `idl`, and `to-dec`.
 - `src/core/` reads the RPC and parses transactions. It runs the surfnet lifecycle and cheatcodes. It funds accounts and records account snapshots. It normalizes execution results and assembles the report.
 - `src/parsers/` defines known programs and decodes instructions, including Anchor accounts and arguments from an IDL. It builds an execution tree from logs.
 - `src/output/` renders text and JSON.
